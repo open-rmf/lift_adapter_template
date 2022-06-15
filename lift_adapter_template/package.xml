@@ -4,7 +4,7 @@
   <name>lift_adapter</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="alexchua0108@outlook.com">rosi</maintainer>
+  <maintainer email=""></maintainer>
   <license>TODO: License declaration</license>
 
   <exec_depend>rmf_lift_msgs</exec_depend>

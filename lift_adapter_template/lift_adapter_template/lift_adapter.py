@@ -78,9 +78,9 @@ class LiftAdapter(Node):
 
     def get_lift_status(self):
         # Get lift status directly from Lift API/Software
-        self.current_floor = self.api.get_lift_current_location()
-        self.available_floors = self.api.get_lift_available_floor()
-        self.destination_floor = self.api.get_lift_destination()
+        self.current_floor = self.api.get_lift_current_floor()
+        self.available_floors = self.api.get_lift_available_floors()
+        self.destination_floor = self.api.get_lift_destination_floor()
         self.lift_door_state = self.api.get_lift_door_mode()
         self.lift_motion_state = self.get_lift_motion_mode()
 
@@ -107,7 +107,6 @@ class LiftAdapter(Node):
             else:
                 self.get_logger().warning(f"Request to lift [{self.lift_name}] to floor [{self.floor_request}] is unsuccessful")
             time.sleep(2)
-
 
     def execute_human_mode_request(self,door_request):
         # door requests are necessary in "human" mode to open/close doors
