@@ -14,10 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import sys
 import enum
 from yaml import YAMLObject
-from __future__ import annotations
+from typing import Optional
 from rclpy.impl.rcutils_logger import RcutilsLogger
 
 
@@ -60,40 +62,42 @@ class LiftAPI:
         # ------------------------ #
         return True
 
-    def available_floors(self) -> list[str]:
-        ''' Returns the available floors for this lift'''
+    def available_floors(self) -> Optional[list[str]]:
+        ''' Returns the available floors for this lift, or None the query
+            failed'''
         # ------------------------ #
         # IMPLEMENT YOUR CODE HERE #
         # ------------------------ #
-        return []
+        return None
 
-    def current_floor(self) -> str:
-        ''' Returns the current floor of this lift'''
+    def current_floor(self) -> Optional[str]:
+        ''' Returns the current floor of this lift, or None the query failed'''
         # ------------------------ #
         # IMPLEMENT YOUR CODE HERE #
         # ------------------------ #
-        return ''
+        return None
 
-    def destination_floor(self) -> str:
-        ''' Returns the destination floor of this lift'''
+    def destination_floor(self) -> Optional[str]:
+        ''' Returns the destination floor of this lift, or None the query
+            failed'''
         # ------------------------ #
         # IMPLEMENT YOUR CODE HERE #
         # ------------------------ #
-        return ''
+        return None
 
-    def lift_door_state(self) -> DoorState:
-        ''' Returns the state of the lift door'''
+    def lift_door_state(self) -> Optional[DoorState]:
+        ''' Returns the state of the lift door, or None the query failed'''
         # ------------------------ #
         # IMPLEMENT YOUR CODE HERE #
         # ------------------------ #
-        return DoorState.CLOSED
+        return None
 
-    def lift_motion_state(self) -> MotionState:
-        ''' Returns the lift cabin motion state'''
+    def lift_motion_state(self) -> Optional[MotionState]:
+        ''' Returns the lift cabin motion state, or None the query failed'''
         # ------------------------ #
         # IMPLEMENT YOUR CODE HERE #
         # ------------------------ #
-        return MotionState.UNKNOWN
+        return None
 
     def command_lift(self, floor: str) -> bool:
         ''' Sends the lift cabin to a specific floor and opens all available

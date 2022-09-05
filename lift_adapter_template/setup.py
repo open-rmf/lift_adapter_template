@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = 'lift_adapter'
+package_name = 'lift_adapter_template'
 
 setup(
     name=package_name,
@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'lift_adapter = lift_adapter.lift_adapter:main'
+            'lift_adapter_template = lift_adapter_template.lift_adapter_template:main'
         ],
     },
 )

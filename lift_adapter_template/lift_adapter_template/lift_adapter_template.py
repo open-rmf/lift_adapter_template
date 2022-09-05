@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import field
 import sys
 import yaml
 from typing import Optional
@@ -85,12 +86,35 @@ class LiftAdapterTemplate(Node):
         new_state = LiftState()
         new_state.lift_time = self.get_clock().now().to_msg()
         new_state.lift_name = self.lift_name
-        new_state.available_floors = \
-            [f for f in self.lift_api.available_floors()]
-        new_state.current_floor = self.lift_api.current_floor()
-        new_state.destination_floor = self.lift_api.destination_floor()
-        new_state.door_state = self.lift_api.lift_door_state()
-        new_state.motion_state = self.lift_api.lift_motion_state()
+
+        def _retrieve_fail_error(value_name: str):
+            self.get_logger().error(f'Unable to retrieve {value_name}')
+            return None
+
+        available_floors = self.lift_api.available_floors()
+        if available_floors is None:
+            return _retrieve_fail_error('available_floors')
+        new_state.available_floors = [f for f in available_floors]
+
+        current_floor = self.lift_api.current_floor()
+        if current_floor is None:
+            return _retrieve_fail_error('current_floor')
+        new_state.current_floor = current_floor
+
+        destination_floor = self.lift_api.destination_floor()
+        if destination_floor is None:
+            return _retrieve_fail_error('destination_floor')
+        new_state.destination_floor = destination_floor
+
+        door_state = self.lift_api.lift_door_state()
+        if door_state is None:
+            return _retrieve_fail_error('door_state')
+        new_state.door_state = door_state
+
+        motion_state = self.lift_api.lift_motion_state()
+        if motion_state is None:
+            return _retrieve_fail_error('motion_state')
+        new_state.motion_state = motion_state
 
         new_state.available_modes = [LiftState.MODE_HUMAN, LiftState.MODE_AGV]
         new_state.current_mode = LiftState.MODE_AGV
