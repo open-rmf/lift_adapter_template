@@ -25,7 +25,7 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_system_default
 from rmf_lift_msgs.msg import LiftState, LiftRequest
 
-from LiftAPI import LiftAPI
+from .LiftAPI import LiftAPI
 
 '''
     The LiftAdapterTemplate is a node which provide updates to Open-RMF, as well
