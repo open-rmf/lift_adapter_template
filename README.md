@@ -36,6 +36,15 @@ Alternatively, if your lift offers a websocket port for communication or allows 
 
 The `config.yaml` file that is to be passed in via arguments, should contain all the important parameters needed for setting up the LiftAPI. In this template, no example config is provided, the user will need to provide one that has all the information required for the `LiftAPI` to perform its functions.
 
+For example, if the lift API is via REST API calls, one would expect the config file to contain several fields required to perform the requests, and used in the API calls.
+
+```
+base_url: "http://192.168.123.123/"
+user: "username"
+password: "password"
+lift_guid: "7e32b6f5-f1ac-14ec-1e1e-94c6911c8a3b"
+```
+
 ## Step 3: Run the lift adapter
 
 Run the command below while passing the paths to the configuration file that contains all information required to operate this lift.
