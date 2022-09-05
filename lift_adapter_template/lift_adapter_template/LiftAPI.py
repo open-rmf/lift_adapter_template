@@ -20,6 +20,7 @@ import sys
 import enum
 from yaml import YAMLObject
 from typing import Optional
+from rmf_lift_msgs.msg import LiftState
 from rclpy.impl.rcutils_logger import RcutilsLogger
 
 
@@ -85,15 +86,17 @@ class LiftAPI:
         # ------------------------ #
         return None
 
-    def lift_door_state(self) -> Optional[DoorState]:
-        ''' Returns the state of the lift door, or None the query failed'''
+    def lift_door_state(self) -> Optional[int]:
+        ''' Returns the state of the lift door, based on the static enum
+            LiftState.DOOR_*, or None the query failed'''
         # ------------------------ #
         # IMPLEMENT YOUR CODE HERE #
         # ------------------------ #
         return None
 
-    def lift_motion_state(self) -> Optional[MotionState]:
-        ''' Returns the lift cabin motion state, or None the query failed'''
+    def lift_motion_state(self) -> Optional[int]:
+        ''' Returns the lift cabin motion state, based on the static enum
+            LiftState.MOTION_*, or None the query failed'''
         # ------------------------ #
         # IMPLEMENT YOUR CODE HERE #
         # ------------------------ #
