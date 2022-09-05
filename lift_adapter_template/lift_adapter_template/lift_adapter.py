@@ -1,169 +1,155 @@
+#!/usr/bin/env python3
+
+# Copyright 2022 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import sys
-import math
 import yaml
+from typing import Optional
+from yaml import YAMLObject
 import argparse
 
-import socket
-import urllib3
-import time
-import threading
-
 import rclpy
-from lift_adapter.LiftClientAPI import LiftClientAPI
 from rclpy.node import Node
-from rclpy.time import Time
-from rmf_lift_msgs.msg import LiftRequest, LiftState
+from rclpy.qos import qos_profile_system_default
+from rmf_lift_msgs.msg import LiftState, LiftRequest
 
-###############################################################################
+from LiftAPI import LiftAPI
 
-class LiftAdapter(Node):
-    def __init__(self,config_yaml):
-        super().__init__('lift_adapter')
-        self.get_logger().info('Starting lift adapter...')
+'''
+    The LiftAdapterTemplate is a node which provide updates to Open-RMF, as well
+    as handle incoming requests to control the integrated lift, by calling the
+    implemented functions in LiftAPI.
+'''
+class LiftAdapterTemplate(Node):
+    def __init__(self, args, config: YAMLObject):
+        super().__init__('lift_adapter_template')
 
-        # Get value from config file
-        self.lift_name = config_yaml['lift']['name']
-        url = config_yaml['lift']['api_endpoint']
-        api_key = config_yaml['lift']['header_key']
-        api_value = config_yaml['lift']['header_value']
-        lift_id = config_yaml['lift']['lift_id']
+        self.lift_name = args.name
+        self.lift_config = config
+        self.lift_api = LiftAPI(self.lift_config)
+        self.lift_state = None
+        self.lift_request = None
 
-        self.api = LiftClientAPI(url,api_key,api_value,lift_id)
-        assert self.api.connected, "Unable to establish connection with lift"
+        # Initialize status
+        self.get_logger().info('Initializing with status.')
+        self.lift_state = self._lift_state()
+        if self.lift_state is None:
+            self.get_logger().error('Failed initilize lift status.')
+            sys.exit(1)
+        print(f'Initial state: {self.lift_state}')
 
-        # The available_floors need to passing from either config file or API/Lift Software
-        self.available_floors = self.api.get_lift_available_floor()
-        # The floor that the lift currently at, need to get this info from API/Lift Software
-        self.current_floor = ''
-        # The floor that the lift is going to, need to get this info from API/Lift Software
-        self.destination_floor = ''
-        # default the lift door is close, this info needs to be provided by API/Lift Software
-        self.lift_door_state = 0
-        # default the motion of the lift is stopped, this info needs to be provided by API/Lift Software
-        self.lift_motion_state = 0
-        self.floor_request = ''
-        # current requestion id, requestor_id(session_id) from the LiftRequest
-        # after the lift request task completed, the value will be remove from the variable self.current_requestor
-        # TODO: to write a logic to remove current_requestor value after the lift request completed
-        self.current_requestor = ''
-
-        self.lift_states_pub = self.create_publisher(
-            LiftState, 'lift_states', 1)
-
+        self.lift_state_pub = self.create_publisher(
+            LiftState,
+            'lift_states',
+            qos_profile=qos_profile_system_default)
         self.lift_request_sub = self.create_subscription(
-            LiftRequest, 'adapter_lift_requests', self.lift_request_cb, 1)
+            LiftRequest,
+            'lift_requests',
+            self.lift_request_callback,
+            qos_profile=qos_profile_system_default)
+        self.update_timer = self.create_timer(0.5, self.update_callback)
+        self.pub_state_timer = self.create_timer(1.0, self.publish_state)
+        self.get_logger().info('Running LiftAdapterTemplate')
 
-        self.periodic_timer = self.create_timer(
-            1.0, self.time_cb)
+    def update_callback(self):
+        new_state = self._lift_state()
+        if new_state is None:
+            self.get_logger().error(
+                'Unable to get new state from lift {}'.format(self.lift_guid))
+            return
+        self.lift_state = new_state
 
-    def time_cb(self):
-        self.get_lift_status()
+        # No request to consider
+        if self.lift_request is None:
+            return
 
-        state_msg = LiftState()
-        state_msg.lift_time = self.get_clock().now().to_msg()
+        # If all is done, set self.request to None
+        if self.lift_request.destination_floor == \
+                self.lift_state.current_floor and \
+                self.lift_state.door_state == LiftState.DOOR_OPEN:
+            self.lift_request = None
 
-        # publish states of the lift
-        state_msg.lift_name = self.lift_name
-        state_msg.available_floors = self.available_floors
-        state_msg.current_floor = self.current_floor
-        state_msg.destination_floor = self.destination_floor
-        state_msg.door_state = self.lift_door_state
-        state_msg.motion_state = self.lift_motion_state
-        # default available_lift mode to AGV only
-        # TODO: to understand how to get the lift mode
-        state_msg.available_modes = [1,2]
-        state_msg.current_mode = LiftState.MODE_AGV
-        state_msg.session_id = self.current_requestor
-        self.lift_states_pub.publish(state_msg)
+    def _lift_state(self) -> Optional[LiftState]:
+        new_state = LiftState()
+        new_state.lift_time = self.get_clock().now().to_msg()
+        new_state.lift_name = self.lift_name
+        new_state.available_floors = \
+            [f for f in self.lift_api.available_floors()]
+        new_state.current_floor = self.lift_api.current_floor()
+        new_state.destination_floor = self.lift_api.destination_floor()
+        new_state.door_state = self.lift_api.lift_door_state()
+        new_state.motion_state = self.lift_api.lift_motion_state()
 
-    def get_lift_status(self):
-        # Get lift status directly from Lift API/Software
-        self.current_floor = self.api.get_lift_current_floor()
-        self.available_floors = self.api.get_lift_available_floors()
-        self.destination_floor = self.api.get_lift_destination_floor()
-        self.lift_door_state = self.api.get_lift_door_mode()
-        self.lift_motion_state = self.get_lift_motion_mode()
+        new_state.available_modes = [LiftState.MODE_HUMAN, LiftState.MODE_AGV]
+        new_state.current_mode = LiftState.MODE_AGV
 
-    def lift_request_cb(self, msg: LiftRequest):
-        if msg.lift_name == self.lift_name:
-            self.get_logger().info(f"lift request [{msg.destination_floor.value}] requested by {msg.session_id}")
-            self.floor_request = msg.destination_floor.value
-            self.current_requestor = msg.session_id.value
-            # AGV Mode
-            if msg.request_type.value == 1:
-                self.execute_agv_mode_request()
-            elif msg.request_type.value == 2:
-                self.execute_human_mode_request(msg.door_state.value)
-                
-    def execute_agv_mode_request(self):
-        # Door requests are not necessary in "AGV" mode, when the doors are always held open when the lift cabin is stopped
-        self.get_logger().info('executing Lift Request in AGV Mode')
-        success = self.api.lift_request_command(self.floor_request)
-        # call the lift until lift API give success feedback
-        while not success:
-            success = self.api.lift_request_command(self.floor_request)
-            if success:
-                self.get_logger().info(f"Request to lift [{self.lift_name}] to floor [{self.floor_request}] is successful")
+        if self.lift_request is not None:
+            if self.lift_request.request_type == \
+                    LiftRequest.REQUEST_END_SESSION:
+                new_state.session_id = ''
             else:
-                self.get_logger().warning(f"Request to lift [{self.lift_name}] to floor [{self.floor_request}] is unsuccessful")
-            time.sleep(2)
+                new_state.session_id = self.request.session_id
+        return new_state
 
-    def execute_human_mode_request(self,door_request):
-        # door requests are necessary in "human" mode to open/close doors
-        self.get_logger().info('executing Lift Request in Human Mode')
-        # call the lift until lift API give success feedback
-        success = False
-        while not success:
-            success = self.api.lift_request_command(self.floor_request)
-            if success:
-                self.get_logger().info(f"Request to lift [{self.lift_name}] to floor [{self.floor_request}] is successful")
-            else:
-                self.get_logger().warning(f"Request to lift [{self.lift_name}] to floor [{self.floor_request}] is unsuccessful")
-            time.sleep(2)
+    def publish_state(self):
+        if self.lift_state is None:
+            self.get_logger().info('No lift state received.')
+            return
+        self.lift_state_pub.publish(self.lift_state)
 
-        while not door_request == self.current_floor:
-            self.get_logger().info(f"Waiting lift to reach floor [{self.door_request}]")
-            time.sleep(1)
-        
-        success = False
-        while not success:
-            if door_request == 0:
-                success = self.api.open_lift_door()
-                lift_door_cmd = 'Close'
-            else:
-                success = self.api.close_lift_door()
-                lift_door_cmd = 'Open'
+    def lift_request_callback(self, msg):
+        if msg.lift_name != self.lift_name:
+            return
 
-            if success:
-                self.get_logger().info(f"Request [{self.lift_name}] door to [{lift_door_cmd}] is successful")
-            else:
-                self.get_logger().warning(f"Request [{self.lift_name}] door to [{lift_door_cmd}] is unsuccessful")
-            time.sleep(3.0)
+        if self.lift_request is not None:
+            self.get_logger().info(
+                'Lift is currently busy with another request, try again later.')
+            return
 
-###############################################################################
+        if self.lift_state is not None and \
+                msg.destination_floor not in self.lift_state.available_floors:
+            self.get_logger().info(
+                'Floor {} not available.'.format(msg.destination_floor))
+            return
+
+        if not self.lift_api.command_lift(msg.destination_floor):
+            self.get_logger().error(
+                f'Failed to send lift to {msg.destination_floor}.')
+            return
+
+        self.get_logger().info(f'Requested lift to {msg.destination_floors}.')
+        self.lift_request = msg
+
 
 def main(argv=sys.argv):
-    rclpy.init(args=argv)
-
     args_without_ros = rclpy.utilities.remove_ros_args(argv)
     parser = argparse.ArgumentParser(
-        prog="lift_adapter",
-        description="Configure and spin up lift adapter for physical lift ")
-    parser.add_argument("-c", "--config_file", type=str, required=True,
-                        help="Path to the config.yaml file for this lift adapter")
+        prog='lift_adapter_template',
+        description='Lift adapter template')
+    parser.add_argument('-n', '--name', required=True, type=str)
+    parser.add_argument('-c', '--config', required=True, type=str)
     args = parser.parse_args(args_without_ros[1:])
-    config_path = args.config_file
 
-    # Load config and nav graph yamls
-    with open(config_path, "r") as f:
-        config_yaml = yaml.safe_load(f)
+    with open(args.config, 'r') as f:
+        config = yaml.safe_load(f)
 
-    lift_adapter = LiftAdapter(config_yaml)
-    rclpy.spin(lift_adapter)
-
-    lift_adapter.destroy_node()
+    rclpy.init()
+    node = LiftAdapterTemplate(args, config)
+    rclpy.spin(node)
     rclpy.shutdown()
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main()
