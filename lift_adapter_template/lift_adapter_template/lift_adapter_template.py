@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import sys
 import yaml
-import argparse
 from typing import Optional
 from yaml import YAMLObject
 
@@ -38,7 +38,7 @@ class LiftAdapterTemplate(Node):
 
         self.lift_name = args.name
         self.lift_config = config
-        self.lift_api = LiftAPI(self.lift_config)
+        self.lift_api = LiftAPI(self.lift_config, self.get_logger())
         self.lift_state = None
         self.lift_request = None
 
@@ -67,7 +67,7 @@ class LiftAdapterTemplate(Node):
         new_state = self._lift_state()
         if new_state is None:
             self.get_logger().error(
-                'Unable to get new state from lift {}'.format(self.lift_guid))
+                f'Unable to get new state from lift {self.lift_name}')
             return
         self.lift_state = new_state
 
@@ -123,7 +123,7 @@ class LiftAdapterTemplate(Node):
                     LiftRequest.REQUEST_END_SESSION:
                 new_state.session_id = ''
             else:
-                new_state.session_id = self.request.session_id
+                new_state.session_id = self.lift_request.session_id
         return new_state
 
     def publish_state(self):
@@ -152,7 +152,7 @@ class LiftAdapterTemplate(Node):
                 f'Failed to send lift to {msg.destination_floor}.')
             return
 
-        self.get_logger().info(f'Requested lift to {msg.destination_floors}.')
+        self.get_logger().info(f'Requested lift to {msg.destination_floor}.')
         self.lift_request = msg
 
 
