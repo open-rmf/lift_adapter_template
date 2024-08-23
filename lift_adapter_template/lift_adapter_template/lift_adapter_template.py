@@ -19,10 +19,15 @@ import sys
 import yaml
 from typing import Optional
 from yaml import YAMLObject
+from threading import Lock
 
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_system_default
+from rclpy.qos import QoSDurabilityPolicy as Durability
+from rclpy.qos import QoSHistoryPolicy as History
+from rclpy.qos import QoSProfile
+from rclpy.qos import QoSReliabilityPolicy as Reliability
 from rmf_lift_msgs.msg import LiftState, LiftRequest
 
 from .LiftAPI import LiftAPI
@@ -41,6 +46,7 @@ class LiftAdapterTemplate(Node):
         self.lift_api = LiftAPI(self.lift_config, self.get_logger())
         self.lift_state = None
         self.lift_request = None
+        self.mutex = Lock()  # ensure that we modify self.lift_request safely
 
         # Initialize status
         self.get_logger().info('Initializing with status.')
@@ -50,6 +56,12 @@ class LiftAdapterTemplate(Node):
             sys.exit(1)
         print(f'Initial state: {self.lift_state}')
 
+        transient_qos = QoSProfile(
+            history=History.KEEP_LAST,
+            depth=10,
+            reliability=Reliability.RELIABLE,
+            durability=Durability.TRANSIENT_LOCAL,
+        )
         self.lift_state_pub = self.create_publisher(
             LiftState,
             'lift_states',
@@ -58,7 +70,7 @@ class LiftAdapterTemplate(Node):
             LiftRequest,
             'lift_requests',
             self.lift_request_callback,
-            qos_profile=qos_profile_system_default)
+            qos_profile=transient_qos)
         self.update_timer = self.create_timer(0.5, self.update_callback)
         self.pub_state_timer = self.create_timer(1.0, self.publish_state)
         self.get_logger().info('Running LiftAdapterTemplate')
@@ -70,16 +82,6 @@ class LiftAdapterTemplate(Node):
                 f'Unable to get new state from lift {self.lift_name}')
             return
         self.lift_state = new_state
-
-        # No request to consider
-        if self.lift_request is None:
-            return
-
-        # If all is done, set self.request to None
-        if self.lift_request.destination_floor == \
-                self.lift_state.current_floor and \
-                self.lift_state.door_state == LiftState.DOOR_OPEN:
-            self.lift_request = None
 
     def _lift_state(self) -> Optional[LiftState]:
         new_state = LiftState()
@@ -119,11 +121,13 @@ class LiftAdapterTemplate(Node):
         new_state.current_mode = LiftState.MODE_AGV
 
         if self.lift_request is not None:
-            if self.lift_request.request_type == \
-                    LiftRequest.REQUEST_END_SESSION:
-                new_state.session_id = ''
-            else:
-                new_state.session_id = self.lift_request.session_id
+            with self.mutex:
+                if self.lift_request.request_type == \
+                        LiftRequest.REQUEST_END_SESSION:
+                    new_state.session_id = ''
+                    self.lift_request = None
+                else:
+                    new_state.session_id = self.lift_request.session_id
         return new_state
 
     def publish_state(self):
@@ -153,7 +157,8 @@ class LiftAdapterTemplate(Node):
             return
 
         self.get_logger().info(f'Requested lift to {msg.destination_floor}.')
-        self.lift_request = msg
+        with self.mutex:
+            self.lift_request = msg
 
 
 def main(argv=sys.argv):
