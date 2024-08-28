@@ -19,7 +19,6 @@ import sys
 import yaml
 from typing import Optional
 from yaml import YAMLObject
-from threading import Lock
 
 import rclpy
 from rclpy.node import Node
@@ -46,7 +45,6 @@ class LiftAdapterTemplate(Node):
         self.lift_api = LiftAPI(self.lift_config, self.get_logger())
         self.lift_state = None
         self.lift_request = None
-        self.mutex = Lock()  # ensure that we modify self.lift_request safely
 
         # Initialize status
         self.get_logger().info('Initializing with status.')
@@ -121,13 +119,12 @@ class LiftAdapterTemplate(Node):
         new_state.current_mode = LiftState.MODE_AGV
 
         if self.lift_request is not None:
-            with self.mutex:
-                if self.lift_request.request_type == \
-                        LiftRequest.REQUEST_END_SESSION:
-                    new_state.session_id = ''
-                    self.lift_request = None
-                else:
-                    new_state.session_id = self.lift_request.session_id
+            if self.lift_request.request_type == \
+                    LiftRequest.REQUEST_END_SESSION:
+                new_state.session_id = ''
+                self.lift_request = None
+            else:
+                new_state.session_id = self.lift_request.session_id
         return new_state
 
     def publish_state(self):
@@ -157,8 +154,7 @@ class LiftAdapterTemplate(Node):
             return
 
         self.get_logger().info(f'Requested lift to {msg.destination_floor}.')
-        with self.mutex:
-            self.lift_request = msg
+        self.lift_request = msg
 
 
 def main(argv=sys.argv):
