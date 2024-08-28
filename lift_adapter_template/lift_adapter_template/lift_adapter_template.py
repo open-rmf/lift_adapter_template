@@ -137,7 +137,8 @@ class LiftAdapterTemplate(Node):
         if msg.lift_name != self.lift_name:
             return
 
-        if self.lift_request is not None:
+        if self.lift_request is not None and \
+                msg.session_id != self.lift_request.session_id:
             self.get_logger().info(
                 'Lift is currently busy with another request, try again later.')
             return
